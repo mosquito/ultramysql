@@ -100,8 +100,8 @@ PyObject *umysql_Error;
 PyObject *umysql_SQLError;
 
 typedef struct {
-  PyObject_HEAD
-    PyObject *fields;
+  PyObject_HEAD;
+  PyObject *fields;
   PyObject *rows;
   PyObject *currRow;
   int numFields;
@@ -112,8 +112,8 @@ int ResultSet_setup(ResultSet *self, int columns);
 
 
 typedef struct {
-  PyObject_HEAD
-    UMConnection conn;
+  PyObject_HEAD;
+  UMConnection conn;
   int sockfd;
 
   PyObject *Error;
