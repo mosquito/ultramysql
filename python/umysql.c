@@ -86,7 +86,11 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #endif
 
 //#define PRINTMARK() fprintf(stderr, "%08x:%s:%s MARK(%d)\n", GetTickCount(), __FILE__, __FUNCTION__, __LINE__)		
-#define PRINTMARK() 		
+#define PRINTMARK()
+
+#if PY_MAJOR_VERSION >= 3
+#define IS_PY3K
+#endif
 
 
 static PyTypeObject ConnectionType;
@@ -97,7 +101,7 @@ PyObject *umysql_SQLError;
 
 typedef struct {
   PyObject_HEAD
-    PyObject *fields; 
+    PyObject *fields;
   PyObject *rows;
   PyObject *currRow;
   int numFields;
@@ -146,8 +150,8 @@ void *API_createResult(int columns)
 void API_resultSetField(void *result, int column, UMTypeInfo *ti, void *_name, size_t _cbName)
 {
   PyObject *field = PyTuple_New(2);
-  PyTuple_SET_ITEM(field, 0, PyString_FromStringAndSize((const char *)_name, _cbName));
-  PyTuple_SET_ITEM(field, 1, PyInt_FromLong(ti->type));
+  PyTuple_SET_ITEM(field, 0, PyBytes_FromStringAndSize((const char *)_name, _cbName));
+  PyTuple_SET_ITEM(field, 1, PyLong_FromLong(ti->type));
   PyTuple_SET_ITEM(((ResultSet *) result)->fields, column, field);
   PRINTMARK();
   return;
@@ -506,7 +510,7 @@ static PyObject *DecodeString (UMTypeInfo *ti, char *value, size_t cbValue)
     break;
 
   case MCS_binary:
-    return PyString_FromStringAndSize(value, cbValue);
+    return PyBytes_FromStringAndSize(value, cbValue);
 
   default:
     break;
@@ -553,7 +557,7 @@ int API_resultRowValue(void *result, int column, UMTypeInfo *ti, char *value, si
     case MFTYPE_SHORT:
     case MFTYPE_INT24:
       {
-        valobj = PyInt_FromLong(parseINT32 (value, ((char *) value) + cbValue));
+        valobj = PyLong_FromLong(parseINT32 (value, ((char *) value) + cbValue));
         break;
       }
 
@@ -573,8 +577,9 @@ int API_resultRowValue(void *result, int column, UMTypeInfo *ti, char *value, si
     case MFTYPE_DOUBLE:
       {
         //FIXME: Too fucking slow
-        PyObject *sobj = PyString_FromStringAndSize((char *) value, cbValue);
-        valobj = PyFloat_FromString (sobj, NULL);
+        PyObject *sobj = PyBytes_FromStringAndSize((char *) value, cbValue);
+        
+        valobj = PyFloat_FromString (sobj);
         Py_DECREF(sobj);
         break;
       }
@@ -657,7 +662,7 @@ int API_resultRowValue(void *result, int column, UMTypeInfo *ti, char *value, si
     case MFTYPE_LONG_BLOB:
     case MFTYPE_BLOB:
       if (ti->flags & MFFLAG_BINARY_FLAG) {
-        valobj = PyString_FromStringAndSize( (const char *) value, cbValue);
+        valobj = PyBytes_FromStringAndSize( (const char *) value, cbValue);
       } else {
         valobj = DecodeString (ti, value, cbValue);
       }
@@ -677,7 +682,7 @@ int API_resultRowValue(void *result, int column, UMTypeInfo *ti, char *value, si
     case MFTYPE_SET:
     case MFTYPE_DECIMAL:
       // Fall through for string encoding
-      valobj = PyString_FromStringAndSize( (const char *) value, cbValue);
+      valobj = PyBytes_FromStringAndSize( (const char *) value, cbValue);
       break;
 
     }
@@ -982,10 +987,10 @@ int AppendEscapedArg (Connection *self, char *start, char *end, PyObject *obj)
   FIXME: Surround strings with '' could be performed in this function to avoid extra logic in AppendAndEscapeString */
   PRINTMARK();
 
-  if (PyString_Check(obj))
+  if (PyBytes_Check(obj))
   {
     PRINTMARK();
-    return AppendAndEscapeString(start, end, PyString_AS_STRING(obj), PyString_AS_STRING(obj) + PyString_GET_SIZE(obj), TRUE);
+    return AppendAndEscapeString(start, end, PyBytes_AS_STRING(obj), PyBytes_AS_STRING(obj) + PyBytes_GET_SIZE(obj), TRUE);
   }
   else
     if (PyUnicode_Check(obj))
@@ -1005,7 +1010,7 @@ int AppendEscapedArg (Connection *self, char *start, char *end, PyObject *obj)
       }
 
 
-      ret = AppendAndEscapeString(start, end, PyString_AS_STRING(strobj), PyString_AS_STRING(strobj) + PyString_GET_SIZE(strobj), TRUE);
+      ret = AppendAndEscapeString(start, end, PyBytes_AS_STRING(strobj), PyBytes_AS_STRING(strobj) + PyBytes_GET_SIZE(strobj), TRUE);
       Py_DECREF(strobj);
 
       return ret;
@@ -1046,7 +1051,7 @@ int AppendEscapedArg (Connection *self, char *start, char *end, PyObject *obj)
           //FIXME: Might possible to avoid this?
           PRINTMARK();
           strobj = PyObject_Str(obj);
-          ret = AppendAndEscapeString(start, end, PyString_AS_STRING(strobj), PyString_AS_STRING(strobj) + PyString_GET_SIZE(strobj), FALSE);
+          ret = AppendAndEscapeString(start, end, PyBytes_AS_STRING(strobj), PyBytes_AS_STRING(strobj) + PyBytes_GET_SIZE(strobj), FALSE);
           Py_DECREF(strobj);
           return ret;
 }
@@ -1066,7 +1071,7 @@ PyObject *EscapeQueryArguments(Connection *self, PyObject *inQuery, PyObject *it
 
   // Estimate output length
 
-  cbOutQuery += PyString_GET_SIZE(inQuery);
+  cbOutQuery += PyBytes_GET_SIZE(inQuery);
 
   iterator = PyObject_GetIter(iterable);
 
@@ -1076,8 +1081,8 @@ PyObject *EscapeQueryArguments(Connection *self, PyObject *inQuery, PyObject *it
     cbOutQuery += 2;
 
     // Worst case escape and utf-8
-    if (PyString_Check(arg))
-      cbOutQuery += (PyString_GET_SIZE(arg) * 2);
+    if (PyBytes_Check(arg))
+      cbOutQuery += (PyBytes_GET_SIZE(arg) * 2);
     else
       if (PyUnicode_Check(arg))
         cbOutQuery += (PyUnicode_GET_SIZE(arg) * 6);
@@ -1103,7 +1108,7 @@ PyObject *EscapeQueryArguments(Connection *self, PyObject *inQuery, PyObject *it
 
 
   optr = obuffer;
-  iptr = PyString_AS_STRING(inQuery);
+  iptr = PyBytes_AS_STRING(inQuery);
 
   hasArg = 0;
 
@@ -1169,7 +1174,7 @@ PyObject *EscapeQueryArguments(Connection *self, PyObject *inQuery, PyObject *it
 END_PARSE:
   Py_DECREF(iterator);
 
-  retobj = PyString_FromStringAndSize (obuffer, (optr - obuffer));
+  retobj = PyBytes_FromStringAndSize (obuffer, (optr - obuffer));
 
   if (heap)
   {
@@ -1212,7 +1217,7 @@ PyObject *Connection_query(Connection *self, PyObject *args)
     Py_DECREF(iterator);
   }
 
-  if (!PyString_Check(inQuery))
+  if (!PyBytes_Check(inQuery))
   {
     if (!PyUnicode_Check(inQuery))
     {
@@ -1261,7 +1266,7 @@ PyObject *Connection_query(Connection *self, PyObject *args)
     escapedQuery = query;
   }
 
-  ret =  UMConnection_Query(self->conn, PyString_AS_STRING(escapedQuery), PyString_GET_SIZE(escapedQuery));
+  ret =  UMConnection_Query(self->conn, PyBytes_AS_STRING(escapedQuery), PyBytes_GET_SIZE(escapedQuery));
 
   Py_DECREF(escapedQuery);
 
@@ -1453,32 +1458,55 @@ static PyMethodDef methods[] = {
   {NULL, NULL, 0, NULL}        /* Sentinel */
 };
 
+#if PY_MAJOR_VERSION >= 3
+    static struct PyModuleDef moduledef = {
+        PyModuleDef_HEAD_INIT,
+        "umysql",                     /* m_name */
+        "",                           /* m_doc */
+        -1,                           /* m_size */
+        methods,             /* m_methods */
+        NULL,                /* m_reload */
+        NULL,                /* m_traverse */
+        NULL,                /* m_clear */
+        NULL,                /* m_free */
+    };
+#endif
+
+#if PY_MAJOR_VERSION >= 3
 PyMODINIT_FUNC
-  initumysql(void) 
+  PyInit_umysql(void)
+#else
+  initumysql(void)
+#endif
 {
   PyObject* m;
   PyObject *dict;
   PyDateTime_IMPORT;
 
-  m = Py_InitModule3("umysql", methods, "");
+  #if PY_MAJOR_VERSION >= 3
+    m = PyModule_Create(&moduledef);
+  #else
+    m = Py_InitModule3("umysql", methods, "");
+  #endif
+
   if (m == NULL)
-    return;
+    return NULL;
 
   dict = PyModule_GetDict(m);
 
   ConnectionType.tp_new = PyType_GenericNew;
   if (PyType_Ready(&ConnectionType) < 0)
-    return;
+    return NULL;
   Py_INCREF(&ConnectionType);
   PyModule_AddObject(m, "Connection", (PyObject *)&ConnectionType);
 
   ResultSetType.tp_new = PyType_GenericNew;
   if (PyType_Ready(&ResultSetType) < 0)
-    return;
+    return NULL;
   Py_INCREF(&ResultSetType);
   PyModule_AddObject(m, "ResultSet", (PyObject *)&ResultSetType);
 
-  umysql_Error = PyErr_NewException("umysql.Error", PyExc_StandardError, NULL);
+  umysql_Error = PyErr_NewException("umysql.Error", PyExc_SyntaxError, NULL);
   umysql_SQLError = PyErr_NewException("umysql.SQLError", umysql_Error, NULL);
 
   PyDict_SetItemString(dict, "Error", umysql_Error);
