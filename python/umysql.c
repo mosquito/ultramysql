@@ -1319,8 +1319,7 @@ static PyMemberDef Connection_members[] = {
 
 
 static PyTypeObject ConnectionType = { 
-  PyObject_HEAD_INIT(NULL)
-  0,				/* ob_size        */
+  PyVarObject_HEAD_INIT(NULL, 0)
   "umysql.Connection",		/* tp_name        */
   sizeof(Connection),		/* tp_basicsize   */
   0,				/* tp_itemsize    */
@@ -1415,8 +1414,7 @@ static PyMemberDef ResultSet_members[] = {
 };
 
 static PyTypeObject ResultSetType = { 
-  PyObject_HEAD_INIT(NULL)
-  0,				/* ob_size        */
+  PyVarObject_HEAD_INIT(NULL, 0)
   "umysql.ResultSet",		/* tp_name        */
   sizeof(ResultSet),		/* tp_basicsize   */
   0,				/* tp_itemsize    */
@@ -1493,7 +1491,6 @@ PyMODINIT_FUNC
     return NULL;
 
   dict = PyModule_GetDict(m);
-
   ConnectionType.tp_new = PyType_GenericNew;
   if (PyType_Ready(&ConnectionType) < 0)
     return NULL;
@@ -1511,4 +1508,8 @@ PyMODINIT_FUNC
 
   PyDict_SetItemString(dict, "Error", umysql_Error);
   PyDict_SetItemString(dict, "SQLError", umysql_SQLError);
+
+  #if PY_MAJOR_VERSION >= 3
+    return m;
+  #endif
 }
